@@ -1,0 +1,24 @@
+[project]
+name = "optrade"
+version = "0.1.0"
+description = "NSE index-option signals with automatic paper trading (Sensibull tickets, Dhan sandbox)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+kite = ["kiteconnect>=5"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+optrade = "optrade.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["optrade*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
