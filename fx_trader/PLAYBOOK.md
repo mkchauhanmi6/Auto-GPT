@@ -9,11 +9,10 @@ Run everything from the repo root: `python3 -m fx_trader <cmd>`.
 
 ## 1. Health check
 1. `git pull` on the working branch, then `python3 -m fx_trader status`.
-2. If it prints `DRY RUN` or a MetaApi error: log it (`log "..."`), commit, and stop. Never work around it.
-3. If the account is not deployed, `status` deploys it; wait ~1 min and rerun.
+2. If it prints `DRY RUN` or an OANDA error: log it (`log "..."`), commit, and stop. Never work around it.
 
 ## 2. Manage open positions first
-Positions tagged `[manual]` were opened by the owner. Report them, never touch them.
+Trades tagged `[manual]` were opened by the owner. Report them, never touch them.
 For each of our positions:
 - **Never widen a stop.** The code refuses it.
 - **At +1R:** move the stop to entry (breakeven).

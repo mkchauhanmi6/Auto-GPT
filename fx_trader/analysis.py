@@ -6,7 +6,6 @@ import json
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from . import config
 
 TF_SECONDS = {"1d": 86400, "4h": 14400, "1h": 3600}
 
@@ -42,10 +41,7 @@ def _to_h4(h1):
 def get_candles(pair, tf, api=None):
     """Closed candles only, oldest first."""
     if api is not None:
-        raw = api.candles(pair + config.SYMBOL_SUFFIX, tf, 1000 if tf == "1d" else 500)
-        bars = [{"time": datetime.fromisoformat(c["time"].replace("Z", "+00:00")), "open": c["open"],
-                 "high": c["high"], "low": c["low"], "close": c["close"]} for c in raw]
-        bars.sort(key=lambda c: c["time"])
+        bars = api.candles(pair, tf, 600 if tf == "1d" else 500)
     elif tf == "1d":
         bars = _yahoo(pair, "1d", "2y")
     else:

@@ -2,14 +2,10 @@
 import os
 
 PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURJPY", "GBPJPY", "EURGBP"]
-SYMBOL_SUFFIX = os.environ.get("FX_SYMBOL_SUFFIX", "")  # e.g. ".m" or "-ECN" on some brokers
+OANDA_TOKEN = os.environ.get("OANDA_TOKEN", "")
+OANDA_ACCOUNT_ID = os.environ.get("OANDA_ACCOUNT_ID", "")  # e.g. 101-004-1234567-001 (practice account)
+DRY_RUN = os.environ.get("FX_DRY_RUN") == "1" or not (OANDA_TOKEN and OANDA_ACCOUNT_ID)
 
-METAAPI_TOKEN = os.environ.get("METAAPI_TOKEN", "")
-METAAPI_ACCOUNT_ID = os.environ.get("METAAPI_ACCOUNT_ID", "")
-METAAPI_REGION = os.environ.get("METAAPI_REGION", "new-york")
-DRY_RUN = os.environ.get("FX_DRY_RUN") == "1" or not (METAAPI_TOKEN and METAAPI_ACCOUNT_ID)
-
-MAGIC = 26093001          # tags orders placed by this tool
 RISK_PER_TRADE = 0.01     # fraction of balance lost if the stop is hit
 MAX_OPEN_RISK = 0.03      # sum of risk across open positions
 MAX_POSITIONS = 3
