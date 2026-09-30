@@ -39,3 +39,13 @@ Run from the repo root with Python 3. The only dependency is the standard librar
    - any veto and why
 6. **Save:** commit `us_trader/journal/` and push to the working branch.
 7. **Fridays:** run `python3 -m us_trader review` and include it in the log. It reports ETF and stock dip-buys separately. After 30 round trips in either sleeve, compare that sleeve with its backtest numbers above and say plainly whether they hold. For stocks, remember the backtest is overstated.
+
+## Hourly monitor (weekdays 9:45–14:45 New York time)
+The rules decide entries and exits on the closing price, so the hourly checks **never buy and never make rule exits**. Those happen only in the 15:45 run.
+1. Run `python3 -m us_trader monitor`. It shows equity, each position's move today and since entry, a preview of what the 15:45 run would do at current prices, and ALERTS.
+2. If there are no alerts, don't log or commit. Reply with a one-line status.
+3. For each alert, search that name's news from today:
+   - **Ordinary selling** (market-wide drop, sector rotation, no company news): hold. The rules expect drawdowns.
+   - **A company-altering event for a single stock** (fraud or accounting allegations, trading halt, bankruptcy risk, a guidance cut or major regulatory action announced today, a pending acquisition): run `python3 -m us_trader close SYM --reason "<event + source>"`. The index ETFs can't be closed this way.
+   - Log what you found and what you did, then commit and push the journal.
+4. If the account is within 5 points of the 20% drawdown halt, tell the owner in the reply.

@@ -237,6 +237,62 @@ def cmd_run(args):
     print(f"sent {sent}/{len(orders)} orders")
 
 
+def cmd_monitor(args):
+    """Intraday check: no orders. Flags positions that need a news check and previews likely entries."""
+    alp = Alpaca(config.API_KEY, config.API_SECRET)
+    st = load_state(alp)
+    clock, acc, pos = alp.clock(), alp.account(), alp.positions()
+    eq, last = float(acc["equity"]), float(acc["last_equity"])
+    peak = max(st["peak_equity"], eq)
+    alerts = []
+    print(f"{NOW:%H:%M} UTC  equity ${eq:,.2f} (today {eq / last - 1:+.2%}), drawdown from peak {eq / peak - 1:+.2%}, "
+          f"market {'OPEN' if clock['is_open'] else 'closed'}")
+    if eq < (1 - config.MAX_DRAWDOWN_HALT * 0.75) * peak:
+        alerts.append(f"account within 5 pts of the {config.MAX_DRAWDOWN_HALT:.0%} drawdown halt")
+    for s, p in sorted(pos.items()):
+        day = float(p.get("change_today") or 0)
+        from_entry = float(p["unrealized_plpc"])
+        print(f"  {s:5s} ${float(p['market_value']):>10,.0f}  today {day:+.2%}  since entry {from_entry:+.2%}")
+        if day <= -config.ALERT_DAY_MOVE:
+            alerts.append(f"{s} down {day:.1%} today")
+        if (s in st["stocks"] or s in st["dip"]) and from_entry <= -config.ALERT_FROM_ENTRY:
+            alerts.append(f"{s} down {from_entry:.1%} since entry")
+    held = [s for s in st["stocks"]] + [s for s in st["dip"]]
+    if clock["is_open"]:
+        ind = snapshot(alp, True, ETFS + STOCKS)
+        spy_day = ind["SPY"]["price"] / indicators("SPY")["price"] - 1
+        if spy_day <= -config.ALERT_SPY_DAY_MOVE:
+            alerts.append(f"SPY down {spy_day:.1%} today")
+        exits = [s for s in held if s in ind and ind[s]["price"] > ind[s]["sma5"]]
+        entries = sorted((ind[s]["rsi2"], s) for s in ETFS + STOCKS
+                         if s in ind and s not in held and is_dip_entry(ind[s]))
+        print("If the close were now: exits " + (", ".join(exits) or "none") + "; entry candidates "
+              + (", ".join(f"{s} {r:.1f}" for r, s in entries) or "none")
+              + ("" if ind["SPY"]["above_sma200"] else " (stock entries paused: SPY below 200d)"))
+    print("ALERTS: " + ("; ".join(alerts) if alerts else "none"))
+
+
+def cmd_close(args):
+    """Emergency exit of one position for a company-altering event. Journaled separately from rule exits."""
+    if len(args.reason) < 30:
+        sys.exit("an emergency exit needs --reason (>=30 chars) naming the event and source")
+    alp = Alpaca(config.API_KEY, config.API_SECRET)
+    st = load_state(alp)
+    s = args.symbol.upper()
+    pos = alp.positions()
+    if s not in pos:
+        sys.exit(f"no {s} position")
+    if s == config.CORE_SYMBOL or s in config.DIP_SYMBOLS:
+        sys.exit("REFUSED: index ETFs follow their rules only; emergency exits are for single stocks")
+    p = pos[s]
+    alp.close_position(s)
+    st["stocks"].pop(s, None)
+    save_state(st)
+    journal("emergency_exit", symbol=s, qty=float(p["qty"]), price=float(p["current_price"]),
+            pl=float(p["unrealized_pl"]), reason=args.reason)
+    print(f"CLOSED {s} at ~{p['current_price']} (P&L {float(p['unrealized_pl']):+,.2f})")
+
+
 def cmd_log(args):
     os.makedirs(config.JOURNAL_DIR, exist_ok=True)
     path = os.path.join(config.JOURNAL_DIR, f"{NOW:%Y-%m-%d}.md")
@@ -284,10 +340,13 @@ def main():
     r.add_argument("--veto", action="append", default=[], help="skip a new dip-buy entry in SYMBOL")
     r.add_argument("--reason")
     r.add_argument("--resume", action="store_true")
+    sub.add_parser("monitor")
+    c = sub.add_parser("close"); c.add_argument("symbol"); c.add_argument("--reason", required=True)
     lg = sub.add_parser("log"); lg.add_argument("text")
     sub.add_parser("review")
     args = ap.parse_args()
-    {"status": cmd_status, "run": cmd_run, "log": cmd_log, "review": cmd_review}[args.cmd](args)
+    {"status": cmd_status, "run": cmd_run, "monitor": cmd_monitor, "close": cmd_close, "log": cmd_log,
+     "review": cmd_review}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -42,6 +42,11 @@ EARNINGS_BLACKOUT_DAYS = 7
 REBALANCE_DRIFT = 0.03     # resize a holding only if it drifted this far (fraction of equity) from target
 MAX_DRAWDOWN_HALT = 0.20   # liquidate and halt if equity falls 20% below its peak
 
+# Intraday monitor alerts (no orders; they trigger a news check)
+ALERT_DAY_MOVE = 0.05      # a held stock/ETF down 5%+ today
+ALERT_FROM_ENTRY = 0.12    # a held dip-buy down 12%+ from entry
+ALERT_SPY_DAY_MOVE = 0.03  # SPY down 3%+ today
+
 HERE = os.path.dirname(__file__)
 JOURNAL_DIR = os.path.join(HERE, "journal")
 STATE_FILE = os.path.join(JOURNAL_DIR, "state.json")
