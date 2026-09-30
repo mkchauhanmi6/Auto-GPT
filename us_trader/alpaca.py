@@ -36,6 +36,9 @@ class Alpaca:
     def positions(self):
         return {p["symbol"]: p for p in self._req(f"{PAPER}/positions")}
 
+    def portfolio_history(self):
+        return self._req(f"{PAPER}/account/portfolio/history?period=1A&timeframe=1D")
+
     def open_orders(self):
         return self._req(f"{PAPER}/orders?status=open")
 

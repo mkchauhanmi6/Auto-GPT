@@ -17,10 +17,25 @@ TRADES = os.path.join(config.JOURNAL_DIR, "trades.jsonl")
 UNIVERSE = sorted(set(config.DIP_SYMBOLS) | {config.CORE_SYMBOL})
 
 
-def load_state():
+def load_state(alp):
     if os.path.exists(config.STATE_FILE):
         return json.load(open(config.STATE_FILE))
-    return {"core_on": False, "dip": {}, "peak_equity": 0.0, "halted": False}
+    # No state file (first run, or a run whose push failed): rebuild it from the account so held
+    # dip-buys are not mistaken for strays and sold.
+    pos, eq = alp.positions(), float(alp.account()["equity"])
+    core = config.CORE_SYMBOL in pos and float(pos[config.CORE_SYMBOL]["market_value"]) >= 0.4 * eq
+    dip = {}
+    for s in config.DIP_SYMBOLS:
+        if s not in pos:
+            continue
+        val = float(pos[s]["market_value"]) - (config.CORE_WEIGHT * eq if s == config.CORE_SYMBOL and core else 0)
+        if val >= 0.5 * config.DIP_WEIGHT * eq:
+            dip[s] = {"entry_date": "unknown", "entry_price": float(pos[s]["avg_entry_price"])}
+    hist = alp.portfolio_history()
+    peak = max([float(x) for x in hist.get("equity") or [] if x] + [eq])
+    if pos:
+        print(f"[state rebuilt from account: core={'ON' if core else 'off'} dip={sorted(dip)} peak={peak:,.2f}]")
+    return {"core_on": core, "dip": dip, "peak_equity": peak, "halted": False}
 
 
 def save_state(st):
@@ -40,7 +55,8 @@ def snapshot(alp, market_open):
 
 
 def cmd_status(args):
-    alp, st = Alpaca(config.API_KEY, config.API_SECRET), load_state()
+    alp = Alpaca(config.API_KEY, config.API_SECRET)
+    st = load_state(alp)
     acc, clock, pos = alp.account(), alp.clock(), alp.positions()
     eq, last = float(acc["equity"]), float(acc["last_equity"])
     print(f"Alpaca PAPER account: equity ${eq:,.2f} (today {eq - last:+,.2f}, {eq / last - 1:+.2%}) cash ${float(acc['cash']):,.2f}")
@@ -60,7 +76,8 @@ def cmd_status(args):
 
 
 def cmd_run(args):
-    alp, st = Alpaca(config.API_KEY, config.API_SECRET), load_state()
+    alp = Alpaca(config.API_KEY, config.API_SECRET)
+    st = load_state(alp)
     clock, acc = alp.clock(), alp.account()
     if args.execute and not clock["is_open"]:
         sys.exit("REFUSED: market is closed. The rules were tested on end-of-day fills; run in the last 30 min of the session.")
