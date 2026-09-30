@@ -45,6 +45,14 @@ class Alpaca:
     def latest_price(self, symbol):
         return float(self._req(f"{DATA}/stocks/{symbol}/trades/latest?feed=iex")["trade"]["p"])
 
+    def latest_prices(self, symbols):
+        out = {}
+        for i in range(0, len(symbols), 100):
+            chunk = ",".join(symbols[i:i + 100])
+            trades = self._req(f"{DATA}/stocks/trades/latest?symbols={chunk}&feed=iex")["trades"]
+            out.update({s: float(t["p"]) for s, t in trades.items()})
+        return out
+
     def market_order(self, symbol, side, qty, client_id):
         return self._req(f"{PAPER}/orders", "POST", {
             "symbol": symbol, "side": side, "type": "market", "time_in_force": "day",

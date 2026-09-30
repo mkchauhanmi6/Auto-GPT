@@ -6,36 +6,43 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from . import config
+from . import config, earnings
 from .alpaca import Alpaca
 from .signals import NY, indicators
+from .universe import SECTOR
 
 NOW = datetime.now(timezone.utc)
 TRADES = os.path.join(config.JOURNAL_DIR, "trades.jsonl")
-UNIVERSE = sorted(set(config.DIP_SYMBOLS) | {config.CORE_SYMBOL})
+ETFS = sorted(set(config.DIP_SYMBOLS) | {config.CORE_SYMBOL})
+STOCKS = sorted(SECTOR)
+UNIVERSE = ETFS + STOCKS
 
 
+# ---------- state & journal ----------
 def load_state(alp):
     if os.path.exists(config.STATE_FILE):
-        return json.load(open(config.STATE_FILE))
+        st = json.load(open(config.STATE_FILE))
+        st.setdefault("stocks", {})
+        return st
     # No state file (first run, or a run whose push failed): rebuild it from the account so held
-    # dip-buys are not mistaken for strays and sold.
+    # positions are not mistaken for strays and sold.
     pos, eq = alp.positions(), float(alp.account()["equity"])
-    core = config.CORE_SYMBOL in pos and float(pos[config.CORE_SYMBOL]["market_value"]) >= 0.4 * eq
+    val = lambda s: float(pos[s]["market_value"]) if s in pos else 0.0
+    core = val(config.CORE_SYMBOL) >= 0.5 * config.CORE_WEIGHT * eq
     dip = {}
     for s in config.DIP_SYMBOLS:
-        if s not in pos:
-            continue
-        val = float(pos[s]["market_value"]) - (config.CORE_WEIGHT * eq if s == config.CORE_SYMBOL and core else 0)
-        if val >= 0.5 * config.DIP_WEIGHT * eq:
+        v = val(s) - (config.CORE_WEIGHT * eq if s == config.CORE_SYMBOL and core else 0)
+        if s in pos and v >= 0.5 * config.DIP_WEIGHT * eq:
             dip[s] = {"entry_date": "unknown", "entry_price": float(pos[s]["avg_entry_price"])}
+    stocks = {s: {"entry_date": "unknown", "entry_price": float(pos[s]["avg_entry_price"])} for s in STOCKS if s in pos}
     hist = alp.portfolio_history()
     peak = max([float(x) for x in hist.get("equity") or [] if x] + [eq])
     if pos:
-        print(f"[state rebuilt from account: core={'ON' if core else 'off'} dip={sorted(dip)} peak={peak:,.2f}]")
-    return {"core_on": core, "dip": dip, "peak_equity": peak, "halted": False}
+        print(f"[state rebuilt from account: core={'ON' if core else 'off'} dip={sorted(dip)} stocks={sorted(stocks)}]")
+    return {"core_on": core, "dip": dip, "stocks": stocks, "peak_equity": peak, "halted": False}
 
 
 def save_state(st):
@@ -49,11 +56,26 @@ def journal(event, **kw):
         f.write(json.dumps({"ts": NOW.isoformat(timespec="seconds"), "event": event, **kw}) + "\n")
 
 
-def snapshot(alp, market_open):
-    """Indicators for the universe; while the market is open the live price stands in for today's close."""
-    return {s: indicators(s, alp.latest_price(s) if market_open else None) for s in UNIVERSE}
+def snapshot(alp, market_open, symbols=UNIVERSE):
+    """Indicators per symbol; while the market is open the live price stands in for today's close."""
+    live = alp.latest_prices(symbols) if market_open else {}
+
+    def one(s):
+        try:
+            return s, indicators(s, live.get(s))
+        except Exception as e:  # one bad data feed must not stop the run
+            print(f"  [skip {s}: {str(e)[:80]}]")
+            return s, None
+
+    with ThreadPoolExecutor(8) as ex:
+        return {s: i for s, i in ex.map(one, symbols) if i}
 
 
+def is_dip_entry(i):
+    return i["above_sma200"] and i["rsi2"] < config.DIP_RSI_ENTRY
+
+
+# ---------- commands ----------
 def cmd_status(args):
     alp = Alpaca(config.API_KEY, config.API_SECRET)
     st = load_state(alp)
@@ -67,12 +89,18 @@ def cmd_status(args):
         tag = "" if s in UNIVERSE else "  [not managed]"
         print(f"  {s:5s} {float(p['qty']):>10.4f} @ {float(p['avg_entry_price']):>8.2f} now {float(p['current_price']):>8.2f} "
               f"value ${float(p['market_value']):>11,.2f} P&L {float(p['unrealized_pl']):+,.2f} ({float(p['unrealized_plpc']):+.2%}){tag}")
-    print(f"Sleeves: core SPY {'ON' if st['core_on'] else 'off'}; dip-buys open: "
-          + (", ".join(f"{s} since {v['entry_date']} @ {v['entry_price']}" for s, v in st["dip"].items()) or "none"))
-    print("Signals (" + ("live price as today's close" if clock["is_open"] else "last close") + "):")
-    for s, i in snapshot(alp, clock["is_open"]).items():
+    fmt = lambda d: ", ".join(f"{s} since {v['entry_date']} @ {v['entry_price']}" for s, v in d.items()) or "none"
+    print(f"Sleeves: core SPY {'ON' if st['core_on'] else 'off'}; ETF dip-buys: {fmt(st['dip'])}")
+    print(f"         stocks ({len(st['stocks'])}/{config.STOCK_SLOTS}): {fmt(st['stocks'])}")
+    ind = snapshot(alp, clock["is_open"])
+    print("ETF signals (" + ("live price as today's close" if clock["is_open"] else "last close") + "):")
+    for s in ETFS:
+        i = ind[s]
         print(f"  {s:4s} {i['price']:>8.2f} sma200 {i['sma200']:>8.2f} ({'above' if i['above_sma200'] else 'BELOW'}) "
               f"sma5 {i['sma5']:>8.2f} rsi2 {i['rsi2']:>5.1f}")
+    cands = sorted((ind[s]["rsi2"], s) for s in STOCKS if s in ind and is_dip_entry(ind[s]))
+    print("Stock dip candidates (above sma200, rsi2 < 10): "
+          + (", ".join(f"{s} {r:.1f} ({SECTOR[s]})" for r, s in cands) or "none"))
 
 
 def cmd_run(args):
@@ -97,40 +125,85 @@ def cmd_run(args):
             for s in UNIVERSE:
                 if s in pos:
                     alp.close_position(s)
-            st.update(halted=True, core_on=False, dip={})
+            st.update(halted=True, core_on=False, dip={}, stocks={})
             journal("halt", equity=eq, peak=st["peak_equity"])
             save_state(st)
         return
 
     ind = snapshot(alp, clock["is_open"])
     today = str(datetime.now(NY).date())
-    notes = []
-    core_on = ind[config.CORE_SYMBOL]["above_sma200"]
+    notes, changed = [], set()
+
+    def veto(s, what):
+        notes.append(f"{what} {s} VETOED: {args.reason}")
+        if args.execute:
+            journal("veto", symbol=s, price=ind[s]["price"], rsi2=ind[s]["rsi2"], reason=args.reason)
+
+    # core
+    spy = ind[config.CORE_SYMBOL]
+    core_on = spy["above_sma200"]
     if core_on != st["core_on"]:
-        notes.append(f"core SPY {'ON' if core_on else 'OFF'} (price {ind['SPY']['price']} vs sma200 {ind['SPY']['sma200']})")
+        notes.append(f"core SPY {'ON' if core_on else 'OFF'} (price {spy['price']} vs sma200 {spy['sma200']})")
+        changed.add(config.CORE_SYMBOL)
+
+    # ETF dip-buys
     dip = dict(st["dip"])
-    changed = {config.CORE_SYMBOL} if core_on != st["core_on"] else set()
     for s in config.DIP_SYMBOLS:
         i = ind[s]
         if s in dip and i["price"] > i["sma5"]:
             notes.append(f"dip EXIT {s}: {i['price']} > sma5 {i['sma5']}")
             del dip[s]
             changed.add(s)
-        elif s not in dip and i["above_sma200"] and i["rsi2"] < config.DIP_RSI_ENTRY:
+        elif s not in dip and is_dip_entry(i):
             if s in vetoes:
-                notes.append(f"dip ENTRY {s} VETOED: {args.reason}")
-                if args.execute:
-                    journal("veto", symbol=s, price=i["price"], rsi2=i["rsi2"], reason=args.reason)
+                veto(s, "dip ENTRY")
                 continue
             notes.append(f"dip ENTRY {s}: rsi2 {i['rsi2']} < {config.DIP_RSI_ENTRY}, above sma200 {i['sma200']}")
             dip[s] = {"entry_date": today, "entry_price": i["price"]}
             changed.add(s)
 
+    # stock dip-buys
+    stocks = dict(st["stocks"])
+    for s in list(stocks):
+        i = ind.get(s)
+        if i and i["price"] > i["sma5"]:
+            notes.append(f"stock EXIT {s}: {i['price']} > sma5 {i['sma5']}")
+            del stocks[s]
+            changed.add(s)
+    cands = sorted((ind[s]["rsi2"], s) for s in STOCKS if s in ind and s not in stocks and is_dip_entry(ind[s]))
+    if cands and not spy["above_sma200"]:
+        notes.append("stock entries paused: SPY below its 200-day average")
+    elif cands and len(stocks) < config.STOCK_SLOTS:
+        try:
+            reporting = earnings.reporting_within(config.EARNINGS_BLACKOUT_DAYS)
+        except Exception as e:
+            reporting = None
+            notes.append(f"stock entries paused: earnings calendar unavailable ({str(e)[:60]})")
+        for r, s in cands if reporting is not None else []:
+            if len(stocks) >= config.STOCK_SLOTS:
+                break
+            if sum(SECTOR[h] == SECTOR[s] for h in stocks) >= config.SECTOR_CAP:
+                continue
+            if s in reporting:
+                notes.append(f"stock skip {s}: earnings within {config.EARNINGS_BLACKOUT_DAYS} days")
+                continue
+            if s in vetoes:
+                veto(s, "stock ENTRY")
+                continue
+            notes.append(f"stock ENTRY {s} ({SECTOR[s]}): rsi2 {r} < {config.DIP_RSI_ENTRY}, above sma200 {ind[s]['sma200']}")
+            stocks[s] = {"entry_date": today, "entry_price": ind[s]["price"]}
+            changed.add(s)
+
+    # orders
     orders = []
     for s in UNIVERSE:
-        px = ind[s]["price"]
-        target = eq * ((config.CORE_WEIGHT if s == config.CORE_SYMBOL and core_on else 0) + (config.DIP_WEIGHT if s in dip else 0))
         cur_qty = float(pos[s]["qty"]) if s in pos else 0.0
+        if s not in ind:
+            continue
+        px = ind[s]["price"]
+        w = (config.CORE_WEIGHT if s == config.CORE_SYMBOL and core_on else 0) + (config.DIP_WEIGHT if s in dip else 0) \
+            + (config.STOCK_WEIGHT if s in stocks else 0)
+        target = eq * w
         diff = target - cur_qty * px
         if target == 0 and cur_qty:
             orders.append((s, "close", cur_qty, diff))
@@ -138,7 +211,8 @@ def cmd_run(args):
             orders.append((s, "buy" if diff > 0 else "sell", abs(diff) / px, diff))
     orders.sort(key=lambda o: o[1] == "buy")  # sells first to free cash
 
-    print(f"Equity ${eq:,.2f}; core {'ON' if core_on else 'off'}; dip-buys {sorted(dip) or 'none'}")
+    print(f"Equity ${eq:,.2f}; core {'ON' if core_on else 'off'}; ETF dip-buys {sorted(dip) or 'none'}; "
+          f"stocks {sorted(stocks) or 'none'} ({len(stocks)}/{config.STOCK_SLOTS})")
     print("\n".join("  " + n for n in notes) or "  no signal changes")
     for s, side, qty, val in orders:
         print(f"  ORDER {side.upper():5s} {s} qty {qty:.4f} (~${abs(val):,.0f})")
@@ -147,14 +221,20 @@ def cmd_run(args):
     if not args.execute:
         print("(plan only; add --execute to send)")
         return
+    sent = 0
     for s, side, qty, val in orders:
-        cid = f"ust-{today}-{s}-{side}"
-        res = alp.close_position(s) if side == "close" else alp.market_order(s, side, qty, cid)
+        try:
+            res = alp.close_position(s) if side == "close" else alp.market_order(s, side, qty, f"ust-{today}-{s}-{side}")
+            sent += 1
+        except Exception as e:  # keep going; the journal and summary record the failure
+            print(f"  FAILED {side} {s}: {e}")
+            journal("order_failed", symbol=s, side=side, error=str(e)[:300])
+            continue
         journal("order", symbol=s, side=side, qty=round(qty, 4), value=round(val, 2), price=ind[s]["price"],
-                order_id=(res or {}).get("id"), notes=[n for n in notes if s in n])
-    st.update(core_on=core_on, dip=dip, last_run=NOW.isoformat(timespec="seconds"))
+                order_id=(res or {}).get("id"), notes=[n for n in notes if f" {s}" in n])
+    st.update(core_on=core_on, dip=dip, stocks=stocks, last_run=NOW.isoformat(timespec="seconds"))
     save_state(st)
-    print("sent", len(orders), "orders")
+    print(f"sent {sent}/{len(orders)} orders")
 
 
 def cmd_log(args):
@@ -169,27 +249,29 @@ def cmd_log(args):
 
 
 def cmd_review(args):
-    """Closed dip-buy round trips and vetoes from the journal."""
+    """Closed round trips per sleeve, compared with the backtest."""
     if not os.path.exists(TRADES):
         sys.exit("no trades yet")
     recs = [json.loads(l) for l in open(TRADES)]
-    opens, trips = {}, []
-    for r in recs:
-        if r["event"] != "order":
-            continue
-        entry = any("dip ENTRY" in n for n in r.get("notes", []))
-        exit_ = any("dip EXIT" in n for n in r.get("notes", []))
-        if entry:
-            opens[r["symbol"]] = r
-        elif exit_ and r["symbol"] in opens:
-            o = opens.pop(r["symbol"])
-            trips.append((r["symbol"], o["ts"][:10], r["ts"][:10], r["price"] / o["price"] - 1))
-    for s, a, b, ret in trips:
-        print(f"  {s} {a} -> {b} {ret:+.2%}")
-    if trips:
-        rets = [t[3] for t in trips]
-        print(f"dip-buy round trips: {len(rets)}, win {sum(r > 0 for r in rets) / len(rets):.0%}, avg {sum(rets) / len(rets):+.2%}"
-              f"  (backtest 2016-2026: win 70%, avg win +1.20%, avg loss -1.57%)")
+    bench = {"dip": "backtest 2016-2026: win 70%, avg win +1.20%, avg loss -1.57%",
+             "stock": "backtest 2016-2026 (survivor-biased): win 65%, avg +0.20%, avg win +1.70%, avg loss -2.60%"}
+    for kind in ("dip", "stock"):
+        opens, trips = {}, []
+        for r in recs:
+            if r["event"] != "order":
+                continue
+            ns = r.get("notes", [])
+            if any(f"{kind} ENTRY" in n for n in ns):
+                opens[r["symbol"]] = r
+            elif any(f"{kind} EXIT" in n for n in ns) and r["symbol"] in opens:
+                o = opens.pop(r["symbol"])
+                trips.append((r["symbol"], o["ts"][:10], r["ts"][:10], r["price"] / o["price"] - 1))
+        print(f"{'ETF dip-buys' if kind == 'dip' else 'Stock dip-buys'}: {len(trips)} closed")
+        for s, a, b, ret in trips[-10:]:
+            print(f"  {s} {a} -> {b} {ret:+.2%}")
+        if trips:
+            rets = [t[3] for t in trips]
+            print(f"  win {sum(x > 0 for x in rets) / len(rets):.0%}, avg {sum(rets) / len(rets):+.2%}  ({bench[kind]})")
     print("vetoes:", sum(r["event"] == "veto" for r in recs))
 
 
