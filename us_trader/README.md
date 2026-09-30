@@ -19,7 +19,7 @@ How to read this:
 - **Honest test:** both rule sets held up on 2016–2026 data, which the rules were not designed on.
 
 ## Setup
-Add `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY` (paper keys) as environment variables in the Claude cloud environment settings.
+Paper keys come from the environment variables `ALPACA_API_KEY_ID` and `ALPACA_API_SECRET_KEY`, or from `~/.alpaca_paper_keys` (KEY=VALUE lines, outside the repo). Never commit keys: the repo is public.
 
 ## Commands
 - `status`: account, positions, sleeve state and today's signals.

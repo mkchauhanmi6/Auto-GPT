@@ -1,8 +1,22 @@
 """Strategy parameters. These are the exact rules that were backtested; change them only with a new backtest."""
 import os
 
-API_KEY = os.environ.get("ALPACA_API_KEY_ID", "")
-API_SECRET = os.environ.get("ALPACA_API_SECRET_KEY", "")
+KEY_FILE = os.path.expanduser("~/.alpaca_paper_keys")  # KEY=VALUE lines, outside the repo; never commit keys
+
+
+def _key(name):
+    if os.environ.get(name):
+        return os.environ[name]
+    if os.path.exists(KEY_FILE):
+        for line in open(KEY_FILE):
+            k, _, v = line.strip().partition("=")
+            if k == name:
+                return v
+    return ""
+
+
+API_KEY = _key("ALPACA_API_KEY_ID")
+API_SECRET = _key("ALPACA_API_SECRET_KEY")
 
 # Core sleeve: hold SPY while it is above its 200-day average, else cash.
 CORE_SYMBOL = "SPY"
