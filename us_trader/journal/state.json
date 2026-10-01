@@ -1,0 +1,33 @@
+{
+ "core_on": true,
+ "dip": {},
+ "halted": false,
+ "last_run": "2026-10-01T19:46:49+00:00",
+ "peak_equity": 100000.0,
+ "stocks": {
+  "C": {
+   "entry_date": "2026-10-01",
+   "entry_price": 126.88
+  },
+  "DE": {
+   "entry_date": "2026-10-01",
+   "entry_price": 663.59
+  },
+  "JNJ": {
+   "entry_date": "2026-10-01",
+   "entry_price": 259.44
+  },
+  "KO": {
+   "entry_date": "2026-10-01",
+   "entry_price": 86.05
+  },
+  "MA": {
+   "entry_date": "2026-10-01",
+   "entry_price": 551.63
+  },
+  "VRTX": {
+   "entry_date": "2026-10-01",
+   "entry_price": 507.65
+  }
+ }
+}
