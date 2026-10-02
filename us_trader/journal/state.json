@@ -2,16 +2,12 @@
  "core_on": true,
  "dip": {},
  "halted": false,
- "last_run": "2026-10-01T19:46:49+00:00",
- "peak_equity": 100000.0,
+ "last_run": "2026-10-02T19:46:26+00:00",
+ "peak_equity": 100347.75,
  "stocks": {
   "C": {
    "entry_date": "2026-10-01",
    "entry_price": 126.88
-  },
-  "DE": {
-   "entry_date": "2026-10-01",
-   "entry_price": 663.59
   },
   "JNJ": {
    "entry_date": "2026-10-01",
