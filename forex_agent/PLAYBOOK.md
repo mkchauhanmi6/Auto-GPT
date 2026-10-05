@@ -54,9 +54,10 @@ close trades on gut feel, wave counts or chart patterns: those were tested or ar
 (see README), and closing on them is not allowed.
 
 ## 6. Record
-Append one line to `forex_agent/journal/daily.md`:
-`date | balance | equity | open legs | actions taken | notes (rate changes, overrides)`.
-Then commit `forex_agent/journal/` and push to `claude/gallant-cannon-u3qdm0`.
+Scheduled runs cannot push to GitHub, so do not commit or push. Put this journal line
+in the report instead:
+`date time | balance | equity | open legs | actions taken | notes (rate changes, overrides, guard numbers)`.
+MetaApi/MT5 trade history is the authoritative record of trades.
 
 ## 7. Report
 End with a short summary: account balance/equity, positions opened or closed and why,
