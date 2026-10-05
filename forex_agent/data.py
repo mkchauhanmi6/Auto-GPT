@@ -100,6 +100,12 @@ def calendar_events(impact: tuple[str, ...] = ("High",)) -> list[dict]:
     return out
 
 
+def pair_events(pair: str) -> list[dict]:
+    """This week's high-impact events for either currency of `pair` (raises if unavailable)."""
+    ccys = {pair[:3], pair[3:6]}
+    return [e for e in calendar_events() if e["currency"] in ccys]
+
+
 def upcoming_news(pair: str, within_hours: float, now: dt.datetime | None = None) -> list[dict]:
     """High-impact events for either currency of `pair` within the next N hours."""
     now = now or dt.datetime.now(dt.timezone.utc)

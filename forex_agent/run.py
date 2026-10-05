@@ -27,8 +27,9 @@ import urllib.request
 
 import pandas as pd
 
+from . import prop
 from .config import RISK, broker_symbol
-from .data import BIS_AREAS, UA, upcoming_news, yahoo_candles
+from .data import BIS_AREAS, UA, pair_events, upcoming_news, yahoo_candles
 from .portfolio_backtest import VS_USD, carry_weights
 
 STOP_ATR = 3.0
@@ -98,11 +99,50 @@ async def build_plan(b, rates: pd.Series) -> dict:
     today_pnl += sum(p.get("unrealizedProfit", p.get("profit", 0)) for p in positions)
     loss_limit_hit = today_pnl <= -info["balance"] * RISK["daily_loss_limit_pct"] / 100
 
+    pp = prop.profile()
+    guard = None
+    if pp:
+        all_pos = await b.positions(ours_only=False)
+        risks = {x["id"]: prop.position_risk(x, await b.spec(x["symbol"])) for x in all_pos}
+        deals_today = await b.deals_since(prop.server_day_start(now), ours_only=False)
+        guard = prop.assess(pp, info, all_pos, risks, deals_today)
+        if guard["worst_case_shortfall"] > 0 and not guard["kill_switch"]:
+            # Close our riskiest legs until every stop hitting could no longer breach the firm floor.
+            need, actions = guard["worst_case_shortfall"], []
+            for x in sorted(positions, key=lambda x: -(risks.get(x["id"]) or 0)):
+                if need <= 0:
+                    break
+                actions.append({"action": "close", "symbol": x["symbol"], "position_id": x["id"],
+                                "reason": "worst case (all stops hit) would breach the FundedNext floor"})
+                need -= risks.get(x["id"]) or 0
+            return {"time": now.isoformat(timespec="seconds"), "balance": info["balance"],
+                    "equity": info["equity"], "prop_guard": guard, "actions": actions}
+        if guard["kill_switch"]:
+            actions = [{"action": "close", "symbol": x["symbol"], "position_id": x["id"],
+                        "reason": "EMERGENCY: 75% of a FundedNext loss limit used"}
+                       for x in positions]
+            return {"time": now.isoformat(timespec="seconds"), "balance": info["balance"],
+                    "equity": info["equity"], "prop_guard": guard, "actions": actions}
+
+    def in_news_window(pair: str) -> str | None:
+        if not pp:
+            return None
+        try:
+            hits = prop.news_window(pair_events(pair), now)
+        except Exception as e:
+            return f"calendar unavailable ({e})"
+        return "; ".join(f"{e['currency']} {e['title']} {e['time']}" for e in hits) or None
+
     actions = []
     for sym, p in open_by_pair.items():
         pair = sym[:6]
         want = targets.get(pair)
         if want != side_of(p):
+            news = in_news_window(pair)
+            if news:
+                actions.append({"action": "skip", "symbol": sym,
+                                "reason": f"close deferred, FundedNext news window: {news}"})
+                continue
             actions.append({"action": "close", "symbol": sym, "position_id": p["id"],
                             "reason": f"carry ranking now wants {want or 'no position'}"})
     n_open = len(open_by_pair) - sum(a["action"] == "close" for a in actions)
@@ -118,10 +158,16 @@ async def build_plan(b, rates: pd.Series) -> dict:
             skip = f"daily loss limit hit ({today_pnl:.2f})"
         elif n_open >= RISK["max_open_trades"]:
             skip = "max open trades reached"
+        elif guard and guard["unprotected_positions"]:
+            skip = f"positions without a stop-loss: {guard['unprotected_positions']}"
+        elif guard and not guard["margin_ok"]:
+            skip = f"margin use {guard['margin_use']:.0%} too high"
         else:
             news = upcoming_news(pair, RISK["news_blackout_hours"], now)
             if news:
                 skip = "news blackout: " + "; ".join(f"{e['currency']} {e['title']} {e['time']}" for e in news)
+            elif in_news_window(pair):
+                skip = "FundedNext news window: " + in_news_window(pair)
         if skip:
             actions.append({"action": "skip", "symbol": sym, "side": side, "reason": skip})
             continue
@@ -130,12 +176,20 @@ async def build_plan(b, rates: pd.Series) -> dict:
         entry = px["ask"] if side == "buy" else px["bid"]
         stop_dist = STOP_ATR * a
         stop = entry - stop_dist if side == "buy" else entry + stop_dist
-        risk_money = info["balance"] * RISK["risk_per_trade_pct"] / 100
+        risk_pct = prop.risk_per_trade_pct(pp, RISK["risk_per_trade_pct"], RISK["max_open_trades"])
+        risk_money = info["balance"] * risk_pct / 100
         lots = await b.lots_for_risk(sym, stop_dist, risk_money)
         if lots == 0:
             actions.append({"action": "skip", "symbol": sym, "side": side,
                             "reason": "min lot size would exceed risk limit"})
             continue
+        if guard:
+            if risk_money * prop.SLIPPAGE > guard["new_risk_allowed"]:
+                actions.append({"action": "skip", "symbol": sym, "side": side,
+                                "reason": f"FundedNext guard: worst case would breach our safe floor "
+                                          f"(room {guard['new_risk_allowed']})"})
+                continue
+            guard["new_risk_allowed"] = round(guard["new_risk_allowed"] - risk_money * prop.SLIPPAGE, 2)
         digits = (await b.spec(sym)).get("digits", 5)
         actions.append({"action": "open", "symbol": sym, "side": side, "lots": lots,
                         "ref_price": entry, "stop": round(stop, digits), "atr": a,
@@ -144,7 +198,8 @@ async def build_plan(b, rates: pd.Series) -> dict:
         n_open += 1
     return {"time": now.isoformat(timespec="seconds"), "balance": info["balance"],
             "equity": info["equity"], "currency": info.get("currency"),
-            "today_pnl": round(today_pnl, 2), "rates": rates.to_dict(), "actions": actions}
+            "today_pnl": round(today_pnl, 2), "rates": rates.to_dict(), "prop_guard": guard,
+            "actions": actions}
 
 
 def offline_plan(rates: pd.Series) -> dict:
@@ -168,6 +223,14 @@ async def main_async(args) -> None:
     from .broker import session
 
     async with session() as b:
+        allowed, why = prop.automation_allowed(prop.profile())
+        if args.cmd in ("execute", "close-all") and not allowed and not args.dry_run:
+            print("AUTOMATION BLOCKED:", why)
+            if args.cmd == "close-all":
+                for p in await b.positions():
+                    print(f"MANUAL ACTION: close {p['symbol']} position {p['id']} ({args.reason})")
+                return
+            args.dry_run = True  # still print the plan so it can be placed by hand
         if args.cmd == "close-all":
             if not args.reason:
                 raise SystemExit("close-all needs --reason")

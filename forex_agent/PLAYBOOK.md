@@ -17,6 +17,17 @@ added to the environment's variables.
 `cloud-g2` with a demo server name, or a server containing "Demo"). **If it looks like a
 live account, place no trades and report.** Note the balance, equity and open positions.
 
+## 2b. FundedNext safety (when `PROP_PROFILE` is set)
+The guard in `prop.py` is applied to every plan, and the runner enforces it. Never work around it.
+- At $50,000 or more initial balance, FundedNext requires manual trading. `execute`
+  only prints the plan: report it as manual instructions and place nothing.
+- Below $50,000, orders are sent only if `PROP_EA_APPROVED=1` (FundedNext EA add-on/approval).
+- Never pass `--dry-run` off to get around a block, never edit `prop.py` limits, and never
+  open trades without a stop-loss.
+- Report the `prop_guard` block every run: firm floors, our safe floor, worst-case
+  equity, margin use, and any kill-switch or de-risking closes.
+- Any manual position without a stop-loss blocks new entries. Report it to the user.
+
 ## 3. Fundamental review (central banks)
 `plan --offline` prints the policy rates and their as-of dates. Search the news for
 rate decisions by the Fed, ECB, BoE, BoJ, RBA, BoC, SNB and RBNZ since those dates. If

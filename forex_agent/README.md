@@ -15,6 +15,23 @@ G10 interest-rate carry (`run.py`):
 Setup: set `METAAPI_TOKEN` and `METAAPI_ACCOUNT_ID` (optional: `FOREX_SYMBOL_SUFFIX`,
 `FOREX_RISK_PCT`, `FOREX_MAX_OPEN`, `FOREX_DAILY_LOSS_PCT`) in the environment.
 
+## FundedNext safety (`prop.py`)
+Enable with `PROP_PROFILE` (`fundednext_2step` | `fundednext_1step` | `fundednext_lite`) and
+`PROP_INITIAL_BALANCE`. Rules come from the FundedNext help centre (checked 2026-10-05).
+
+| Rule | FundedNext | What this code does |
+|---|---|---|
+| Daily loss (equity incl. floating, swaps; from initial balance; resets 00:00 server GMT+2/+3) | 5% / 3% / 4% | Worst case (all stops hit, +10% slippage) may use at most half of it (`PROP_BUFFER=0.5`). Day boundary taken as 21:00 UTC (the earlier one) |
+| Max loss (static floor at initial × (1 − Y%)) | 10% / 6% / 8% | Same half-room rule. If a firm floor could be breached, the riskiest legs are closed |
+| Emergency | breach = account lost | Close all agent positions once 75% of either limit is used |
+| Risk per trade | — | min(0.5%, half the daily limit ÷ 6 legs): 0.42% on 2-Step, 0.25% on 1-Step, 0.33% on Lite |
+| EAs/bots | only < $50k on MT4/MT5, with approval | At $50k+ the runner places nothing and prints manual instructions. Below that it needs `PROP_EA_APPROVED=1` |
+| News reward share (funded Stellar) | 40% of profit kept within ±5 min of high-impact news | No opens or ranking closes from 5 min before to 15 min after; no opens within 4h before |
+| Gambling (margin ≥ 70%, all-in) | forbidden | No new trades above 30% margin use |
+| Stops | — | Every agent trade has a broker-side stop. Any position without one blocks new entries |
+| Weekend/overnight holding | allowed | Allowed; swaps count toward the daily loss and are included via equity |
+| Account sharing / third-party management | forbidden | Only the account owner may run this on their own account |
+
 ## Evidence (2026-10-05)
 Daily data: Yahoo Finance, 10 pairs, 2006–2026. Yahoo's daily FX "close" has been a
 post-open snapshot since 2011, so closes are rebuilt from the next bar's open (see

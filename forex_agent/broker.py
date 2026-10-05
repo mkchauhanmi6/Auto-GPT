@@ -37,10 +37,10 @@ class Broker:
     async def spec(self, symbol: str) -> dict:
         return await self.conn.get_symbol_specification(symbol)
 
-    async def deals_since(self, since: dt.datetime) -> list[dict]:
+    async def deals_since(self, since: dt.datetime, ours_only: bool = True) -> list[dict]:
         res = await self.conn.get_deals_by_time_range(since, dt.datetime.now(dt.timezone.utc))
         deals = res.get("deals", []) if isinstance(res, dict) else res
-        return [d for d in deals if d.get("magic") == MAGIC]
+        return [d for d in deals if not ours_only or d.get("magic") == MAGIC]
 
     async def lots_for_risk(self, symbol: str, stop_distance: float, risk_money: float) -> float:
         """Largest volume whose loss at the stop does not exceed risk_money (0 if below min)."""
