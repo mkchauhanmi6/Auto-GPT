@@ -32,7 +32,8 @@ SLIPPAGE = 1.10              # assume stops fill 10% worse
 
 
 def profile() -> dict | None:
-    name = os.environ.get("PROP_PROFILE", "none")
+    # On by default: the user's target is a FundedNext Stellar 2-Step account (<= $15k).
+    name = os.environ.get("PROP_PROFILE", "fundednext_2step")
     if name == "none":
         return None
     if name not in PROFILES:

@@ -16,8 +16,9 @@ Setup: set `METAAPI_TOKEN` and `METAAPI_ACCOUNT_ID` (optional: `FOREX_SYMBOL_SUF
 `FOREX_RISK_PCT`, `FOREX_MAX_OPEN`, `FOREX_DAILY_LOSS_PCT`) in the environment.
 
 ## FundedNext safety (`prop.py`)
-Enable with `PROP_PROFILE` (`fundednext_2step` | `fundednext_1step` | `fundednext_lite`) and
-`PROP_INITIAL_BALANCE`. Rules come from the FundedNext help centre (checked 2026-10-05).
+On by default as `fundednext_2step` (the target account: Stellar 2-Step, $15k or less, so
+automation is allowed once FundedNext approves the EA). Other options are `fundednext_1step`,
+`fundednext_lite` and `none`. `PROP_INITIAL_BALANCE` is required. Rules come from the FundedNext help centre (checked 2026-10-05).
 
 | Rule | FundedNext | What this code does |
 |---|---|---|
