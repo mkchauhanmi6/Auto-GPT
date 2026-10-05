@@ -8,6 +8,7 @@ G10 interest-rate carry (`run.py`):
 - Rank 8 currencies by central-bank policy rate (BIS data).
 - Long the top 3 and short the bottom 3, each via its USD pair.
 - Each leg has a broker-side stop at 3 x daily ATR(14), sized to risk 0.5% of balance.
+- Early exit: if a daily close is at least halfway to the stop, the leg is closed.
 - Stopped legs stay flat until next month. Legs whose currency leaves the long/short group are closed.
 - No new entries within 4h of a high-impact event for either currency, after a 2% daily
   loss, or beyond 6 open legs.
@@ -53,6 +54,21 @@ None of the 16 was profitable in both periods. The best in-sample variant (break
 | Carry, 3 ATR stops (live rules) | −1.6% / −0.18 | +3.0% / 0.41 |
 | 12-month time-series momentum | −1.3% / −0.18 | −0.3% / −0.06 |
 | Carry + momentum blend | −1.2% / −0.23 | +1.4% / 0.35 |
+
+**Early exits on carry legs (3 ATR stop)** (`portfolio_backtest.main_early_exits`):
+
+| Exit rule | 2006–18 ann. / Sharpe / max DD | 2019–26 ann. / Sharpe / max DD |
+|---|---|---|
+| None (stop only) | −1.6% / −0.18 / −30% | +3.0% / 0.41 / −8.5% |
+| Daily close beyond the 50-day SMA (trend flip) | +0.5% / 0.07 / −13% | −0.6% / −0.09 / −12% |
+| Daily close below EMA20 with 20-day momentum against | +0.6% / 0.09 / −16% | +1.7% / 0.26 / −13% |
+| **Daily close ≥ 50% of the way to the stop (live)** | −0.5% / −0.06 / −26% | **+5.0% / 0.68 / −7.6%** |
+| Same at 33% / 67% / 80% | +0.3% / −1.7% / −1.6% | +5.0% / +3.6% / +3.2% |
+
+Exiting losers early on a daily close helps steadily from 33% to 50%, so it is not a single
+lucky setting. Trend-flip exits cut winners and hurt. Elliott wave and Fibonacci levels
+were not used: they are subjective (wave counts differ between analysts) and have no
+reliable published evidence of an edge, so they cannot be backtested honestly.
 
 Carry was the only effect that has been positive recently, but over the full 20 years
 it is roughly break-even. It is traded on demo as a forward test, not as a proven edge.

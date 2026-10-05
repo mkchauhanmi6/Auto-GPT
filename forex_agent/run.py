@@ -12,6 +12,8 @@ Rules (identical to portfolio_backtest.daily_carry_with_stops, stop_atr=3):
   RISK['risk_per_trade_pct'] of balance.
 - A leg stopped out stays flat until next month. A leg whose currency leaves the long or
   short group (e.g. after a rate decision) is closed.
+- Early exit: a leg whose last daily close is at least halfway to its stop is closed
+  (and stays flat until next month).
 - Guardrails: no new legs within the news blackout of a high-impact event for either
   currency, after the daily loss limit is hit, or beyond max_open_trades.
 """
@@ -33,6 +35,9 @@ from .data import BIS_AREAS, UA, pair_events, upcoming_news, yahoo_candles
 from .portfolio_backtest import VS_USD, carry_weights
 
 STOP_ATR = 3.0
+# Close a leg when a daily bar closes at least this fraction of the way to its stop.
+# Backtest (portfolio_backtest.main_early_exits): improved both 2006-18 and 2019-26.
+EARLY_EXIT_FRAC = 0.5
 JOURNAL = pathlib.Path(__file__).parent / "journal" / "trades.jsonl"
 
 
@@ -73,12 +78,16 @@ def journal(entry: dict) -> None:
         f.write(json.dumps(entry, default=str) + "\n")
 
 
+async def closed_daily(b, symbol: str) -> pd.DataFrame:
+    """Broker daily candles that have fully closed (a bar opening at t closes at t + 1 day)."""
+    df = pd.DataFrame(await b.candles(symbol, "1d", 60))
+    df["time"] = pd.to_datetime(df["time"], utc=True)
+    now = pd.Timestamp.now(tz="UTC")
+    return df[df["time"] + pd.Timedelta(days=1) <= now].sort_values("time")
+
+
 async def broker_atr(b, symbol: str) -> float:
-    candles = await b.candles(symbol, "1d", 60)
-    df = pd.DataFrame(candles).sort_values("time")
-    today = dt.datetime.now(dt.timezone.utc).date()
-    df = df[pd.to_datetime(df["time"], utc=True).dt.date < today]  # closed bars only
-    return atr(df)
+    return atr(await closed_daily(b, symbol))
 
 
 def side_of(position: dict) -> str:
@@ -149,7 +158,17 @@ async def build_plan(b, rates: pd.Series) -> dict:
     for pair, side in targets.items():
         sym = broker_symbol(pair)
         if sym in open_by_pair and side_of(open_by_pair[sym]) == side:
-            actions.append({"action": "hold", "symbol": sym, "side": side})
+            pos = open_by_pair[sym]
+            last_close = float((await closed_daily(b, sym))["close"].iloc[-1])
+            stop_dist = abs(pos["openPrice"] - pos["stopLoss"]) if pos.get("stopLoss") else None
+            direction = 1 if side == "buy" else -1
+            if stop_dist and direction * (last_close - pos["openPrice"]) <= -EARLY_EXIT_FRAC * stop_dist:
+                actions.append({"action": "close", "symbol": sym, "position_id": pos["id"],
+                                "reason": f"early exit: daily close {last_close} is over "
+                                          f"{EARLY_EXIT_FRAC:.0%} of the way to the stop"})
+                continue
+            actions.append({"action": "hold", "symbol": sym, "side": side,
+                            "last_daily_close": last_close})
             continue
         skip = None
         if sym in closed_this_month:

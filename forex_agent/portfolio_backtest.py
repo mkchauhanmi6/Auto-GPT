@@ -81,7 +81,8 @@ def carry_weights(rates_row: pd.Series) -> dict[str, float]:
     return {c: (1.0 if c in longs else -1.0 if c in shorts else 0.0) for c in VS_USD}
 
 
-def daily_carry_with_stops(stop_atr: float = 4.0, start: str = "2006-01-01") -> pd.Series:
+def daily_carry_with_stops(stop_atr: float = 4.0, start: str = "2006-01-01",
+                           early_exit: str | None = None) -> pd.Series:
     """Daily simulation of the carry portfolio with a hard stop on every leg.
 
     Each month-start, legs are opened per carry_weights (rates known at prior month end).
@@ -98,6 +99,9 @@ def daily_carry_with_stops(stop_atr: float = 4.0, start: str = "2006-01-01") -> 
         tr = pd.concat([d.high - d.low, (d.high - d.close.shift()).abs(),
                         (d.low - d.close.shift()).abs()], axis=1).max(axis=1)
         d["atr"] = tr.ewm(alpha=1 / 14, adjust=False).mean()
+        d["sma50"] = d["close"].rolling(50).mean()
+        d["ema20"] = d["close"].ewm(span=20, adjust=False).mean()
+        d["mom20"] = d["close"] / d["close"].shift(20) - 1
         daily[ccy] = d
     idx = daily["EUR"].index
     idx = idx[idx >= pd.Timestamp(start, tz="UTC")]
@@ -131,11 +135,25 @@ def daily_carry_with_stops(stop_atr: float = 4.0, start: str = "2006-01-01") -> 
                 if hit and ((direction == 1 and bar.open < stop) or (direction == -1 and bar.open > stop)):
                     px = bar.open
                 day = (t + pd.Timedelta(hours=2)).normalize()  # bars stamp 22:00/23:00 UTC
+                early = False
+                if not hit and early_exit:
+                    if early_exit == "sma50":      # trend turned against the leg
+                        early = direction * (bar.close - bar.sma50) < 0
+                    elif early_exit == "half_stop":  # 1.5 ATR adverse on a close
+                        early = direction * (bar.close - entry) <= -0.5 * risk
+                    elif early_exit == "ema20_mom":  # price-action breakdown + momentum against
+                        early = direction * (bar.close - bar.ema20) < 0 and direction * bar.mom20 < 0
                 pnl[day] = pnl.get(day, 0.0) + (direction * (px - last) + swap_per_day) / risk
                 last = px
-                if hit:
+                if hit or early:
                     break
     return pd.Series(pnl).sort_index() / 100  # 1 unit of risk = 1% of equity
+
+
+def main_early_exits() -> None:
+    for rule in (None, "sma50", "half_stop", "ema20_mom"):
+        ret = daily_carry_with_stops(3.0, early_exit=rule).resample("ME").sum()
+        print(f"carry 3ATR exit={rule!s:10s} 2006-18 {perf(ret[:'2018-12-31'])}  2019-26 {perf(ret['2019-01-01':])}")
 
 
 def main_stops() -> None:

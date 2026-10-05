@@ -1,4 +1,4 @@
-# Daily run playbook (demo account)
+# Run playbook (demo account, every 4 hours on weekdays)
 
 Each scheduled session follows these steps in order. The strategy rules live in
 `run.py`; this playbook adds the fundamental and news review around them. Discretion
@@ -49,6 +49,9 @@ python -m forex_agent.run plan    [--rate ...]
 python -m forex_agent.run execute [--rate ...]
 ```
 Read the plan before executing. Every open has a stop at the broker; there is no target.
+Early exits (a daily close at least halfway to the stop) are decided by `run.py`. Do not
+close trades on gut feel, wave counts or chart patterns: those were tested or are untestable
+(see README), and closing on them is not allowed.
 
 ## 6. Record
 Append one line to `forex_agent/journal/daily.md`:
