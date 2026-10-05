@@ -1,4 +1,4 @@
-# Run playbook (demo account, every 4 hours on weekdays)
+# Run playbook (demo account, hourly on weekdays; full review once a day at 07:30 UTC)
 
 Each scheduled session follows these steps in order. The strategy rules live in
 `run.py`; this playbook adds the fundamental and news review around them. Discretion
