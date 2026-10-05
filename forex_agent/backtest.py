@@ -16,14 +16,25 @@ import numpy as np
 import pandas as pd
 
 from .config import PAIRS, spread_price
-from .data import yahoo_candles
-from .strategy import Params, indicators, stop_and_target
+from .data import policy_rates, rate_differential, yahoo_candles
+from .strategy import Params, fundamental_ok, indicators, stop_and_target
+
+# Retail swap is the rate differential minus a broker markup (paid on both sides).
+SWAP_MARKUP_PCT = 1.0
 
 
-def run_pair(df: pd.DataFrame, pair: str, p: Params, mode: str = "strategy") -> pd.DataFrame:
+def run_pair(
+    df: pd.DataFrame, pair: str, p: Params, mode: str = "strategy", rates: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """mode='strategy' uses the full rules; mode='trend_only' enters on any trend bar
-    (baseline that shows whether pullback + price action adds value)."""
+    (baseline that shows whether pullback + price action adds value).
+    With `rates`, applies the fundamental filter and books swap (carry) in the P&L."""
     d = indicators(df, p)
+    if rates is not None:
+        diff = rate_differential(pair, rates, d.index)
+        diff_before = diff.shift(21 * p.divergence_months)
+    else:
+        diff = diff_before = pd.Series(0.0, index=d.index)
     cost = spread_price(pair)
     sig_col = d["signal"] if mode == "strategy" else d["trend"]
     trades = []
@@ -31,6 +42,9 @@ def run_pair(df: pd.DataFrame, pair: str, p: Params, mode: str = "strategy") -> 
     while i < n - 1:
         direction = int(sig_col.iloc[i])
         if direction == 0:
+            i += 1
+            continue
+        if not fundamental_ok(direction, diff.iloc[i], diff_before.iloc[i], p):
             i += 1
             continue
         row = d.iloc[i]
@@ -62,7 +76,12 @@ def run_pair(df: pd.DataFrame, pair: str, p: Params, mode: str = "strategy") -> 
                 stop = max(stop, trail) if direction == 1 else min(stop, trail)
         if exit_px is None:
             break
-        r = (direction * (exit_px - entry) - cost) / risk
+        days = (d.index[exit_i] - d.index[i + 1]).days
+        swap = 0.0
+        if rates is not None:
+            swap_pct = direction * diff.iloc[i] - SWAP_MARKUP_PCT
+            swap = entry * swap_pct / 100 * days / 365
+        r = (direction * (exit_px - entry) - cost + swap) / risk
         trades.append(
             {
                 "pair": pair,
@@ -110,15 +129,19 @@ def main() -> None:
     ap.add_argument("--entry", default="pullback", choices=["pullback", "breakout"])
     ap.add_argument("--exit", default="target", choices=["target", "trail"])
     ap.add_argument("--baseline", action="store_true", help="also run trend-only baseline")
+    ap.add_argument("--fundamental", default="none", choices=["none", "carry", "divergence", "both"])
+    ap.add_argument("--no-swap", action="store_true", help="ignore rates entirely")
     ap.add_argument("--pairs", default=",".join(PAIRS))
     args = ap.parse_args()
-    p = Params(target_r=args.target_r, entry=args.entry, exit=args.exit)
+    p = Params(target_r=args.target_r, entry=args.entry, exit=args.exit,
+               fundamental=args.fundamental)
+    rates = None if args.no_swap else policy_rates()
     split = pd.Timestamp(args.split, tz="UTC")
 
     data = {pair: yahoo_candles(pair) for pair in args.pairs.split(",")}
     for mode in ("strategy", "trend_only") if args.baseline else ("strategy",):
-        all_t = pd.concat([run_pair(df, pair, p, mode) for pair, df in data.items()])
-        print(f"\n=== {mode}: entry={p.entry} exit={p.exit} target={p.target_r}R ===")
+        all_t = pd.concat([run_pair(df, pair, p, mode, rates) for pair, df in data.items()])
+        print(f"\n=== {mode}: entry={p.entry} exit={p.exit} fund={p.fundamental} ===")
         print("in-sample   :", stats(all_t[all_t["entry_time"] < split]))
         print("out-of-sample:", stats(all_t[all_t["entry_time"] >= split]))
         if mode == "strategy":

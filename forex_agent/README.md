@@ -1,24 +1,44 @@
 # forex_agent
 
-Research and execution tooling for a rules-based FX strategy (MetaApi / MT5).
+Research and execution tooling for a rules-based FX strategy, traded on a MetaApi-linked
+MT5 **demo** account. Each scheduled run follows `PLAYBOOK.md`.
 
-## Backtest findings (2026-10-05)
+## What runs live
+G10 interest-rate carry (`run.py`):
+- Rank 8 currencies by central-bank policy rate (BIS data).
+- Long the top 3 and short the bottom 3, each via its USD pair.
+- Each leg has a broker-side stop at 3 x daily ATR(14), sized to risk 0.5% of balance.
+- Stopped legs stay flat until next month. Legs whose currency leaves the long/short group are closed.
+- No new entries within 4h of a high-impact event for either currency, after a 2% daily
+  loss, or beyond 6 open legs.
 
-Daily bars from Yahoo Finance, 10 major pairs, 2006–2026. Results are in R (1R = the
-amount risked per trade), after typical retail spreads. Fills are conservative:
-next-bar open entry, the stop is assumed hit first on an ambiguous bar, and gaps fill at
-the open. Rules were designed on 2006–2018 and tested unseen on 2019–2026.
+Setup: set `METAAPI_TOKEN` and `METAAPI_ACCOUNT_ID` (optional: `FOREX_SYMBOL_SUFFIX`,
+`FOREX_RISK_PCT`, `FOREX_MAX_OPEN`, `FOREX_DAILY_LOSS_PCT`) in the environment.
 
-| Variant | 2006–18 avg R | 2006–18 PF | 2019–26 avg R | 2019–26 PF | 2019–26 max DD |
-|---|---|---|---|---|---|
-| EMA pullback + price-action trigger, 2R target | +0.02 | 1.02 | −0.39 | 0.51 | −39R |
-| EMA pullback + price-action trigger, ATR trail | +0.01 | 1.02 | −0.45 | 0.41 | −46R |
-| 55-day breakout (trend filter), 2R target | +0.14 | 1.22 | −0.29 | 0.63 | −54R |
-| 55-day breakout (trend filter), ATR trail | +0.13 | 1.24 | −0.33 | 0.49 | −56R |
-| Random direction, 2R target (control) | −0.06 | 0.92 | +0.06 | 1.08 | −23R |
+## Evidence (2026-10-05)
+Daily data: Yahoo Finance, 10 pairs, 2006–2026. Yahoo's daily FX "close" has been a
+post-open snapshot since 2011, so closes are rebuilt from the next bar's open (see
+`data.yahoo_candles`). Policy rates: BIS. Costs: retail spreads, plus swap at the rate
+differential minus a 1% broker markup. Rules were designed on 2006–2018 and checked on 2019–2026.
 
-Conclusion: none of these textbook trend or price-action setups had an edge on FX majors
-from 2019 to 2026. They should not be traded with real money. Caveat: Yahoo FX daily
-OHLC is imperfect. Re-run on broker candles before drawing final conclusions.
+**Single-trade technical setups** (`backtest.py`): 2 entries (EMA pullback with a
+price-action trigger; 55-day breakout) × 2 exits (2R target; ATR trail) × 4 fundamental
+filters (none; carry; rate divergence; both).
+None of the 16 was profitable in both periods. The best in-sample variant (breakout,
+2R, no filter: +0.04R/trade, PF 1.05) lost −0.25R/trade out of sample.
 
-Reproduce: `python -m forex_agent.backtest --entry breakout --exit trail [--baseline]`
+**Monthly portfolios** (`portfolio_backtest.py`):
+
+| Strategy | 2006–18 ann. return / Sharpe | 2019–26 ann. return / Sharpe |
+|---|---|---|
+| Carry, no stops | −0.2% / −0.02 | +3.1% / 0.58 |
+| Carry, 3 ATR stops (live rules) | −1.6% / −0.18 | +3.0% / 0.41 |
+| 12-month time-series momentum | −1.3% / −0.18 | −0.3% / −0.06 |
+| Carry + momentum blend | −1.2% / −0.23 | +1.4% / 0.35 |
+
+Carry was the only effect that has been positive recently, but over the full 20 years
+it is roughly break-even. It is traded on demo as a forward test, not as a proven edge.
+Live trading with real money needs a forward-test track record first.
+
+Reproduce: `python -m forex_agent.backtest --entry breakout --exit target --fundamental carry`
+and `python -m forex_agent.portfolio_backtest`.

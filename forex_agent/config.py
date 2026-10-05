@@ -13,11 +13,9 @@ SYMBOL_SUFFIX = os.environ.get("FOREX_SYMBOL_SUFFIX", "")
 RISK = {
     # % of balance lost if the stop is hit, per trade.
     "risk_per_trade_pct": float(os.environ.get("FOREX_RISK_PCT", "0.5")),
-    "max_open_trades": int(os.environ.get("FOREX_MAX_OPEN", "3")),
+    "max_open_trades": int(os.environ.get("FOREX_MAX_OPEN", "6")),
     # No new trades once today's realized + floating loss reaches this % of balance.
     "daily_loss_limit_pct": float(os.environ.get("FOREX_DAILY_LOSS_PCT", "2.0")),
-    # Max trades sharing the same currency in the same direction (correlation cap).
-    "max_same_currency_exposure": 2,
     # Skip new entries if a high-impact event for either currency is this close.
     "news_blackout_hours": 4,
 }

@@ -35,6 +35,13 @@ class Params:
     breakout_len: int = 55
     exit: str = "target"      # "target" (fixed R) or "trail" (chandelier stop, no target)
     trail_atr: float = 3.0
+    # Fundamental filter on central-bank policy rates (base minus quote, %):
+    #   "none", "carry" (trade only the side that earns the rate differential),
+    #   "divergence" (trade only the side the differential has been moving towards
+    #   over divergence_months), or "both".
+    fundamental: str = "none"
+    min_carry: float = 0.25
+    divergence_months: int = 6
 
 
 def indicators(df: pd.DataFrame, p: Params = Params()) -> pd.DataFrame:
@@ -126,3 +133,18 @@ def describe(d: pd.DataFrame, pair: str, p: Params = Params()) -> dict:
 
 def params_dict(p: Params = Params()) -> dict:
     return asdict(p)
+
+
+def fundamental_ok(direction: int, diff_now: float, diff_before: float, p: Params) -> bool:
+    """Does the rate differential (base minus quote, %) support this trade direction?"""
+    if p.fundamental == "none":
+        return True
+    if np.isnan(diff_now) or np.isnan(diff_before):
+        return False
+    carry = direction * diff_now >= p.min_carry
+    diverging = direction * (diff_now - diff_before) > 0
+    if p.fundamental == "carry":
+        return carry
+    if p.fundamental == "divergence":
+        return diverging
+    return carry and diverging
