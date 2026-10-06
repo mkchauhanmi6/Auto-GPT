@@ -8,3 +8,4 @@
 {"ts": "2026-10-02T19:46:26+00:00", "event": "order", "symbol": "DE", "side": "close", "qty": 7.5348, "value": -5174.07, "price": 686.69, "order_id": "54ce840d-ac05-48b5-b70e-8e85caf1bc46", "notes": ["stock EXIT DE: 686.69 > sma5 679.12"]}
 {"ts": "2026-10-05T19:46:30+00:00", "event": "order", "symbol": "KO", "side": "close", "qty": 58.1058, "value": -5018.02, "price": 86.36, "order_id": "30e14c13-147e-462f-8ced-6b2002c935b9", "notes": ["stock EXIT KO: 86.36 > sma5 86.2"]}
 {"ts": "2026-10-05T19:46:30+00:00", "event": "order", "symbol": "MA", "side": "close", "qty": 9.064, "value": -5117.53, "price": 564.6, "order_id": "78bef843-5a3e-452c-898e-4a7943df663d", "notes": ["stock EXIT MA: 564.6 > sma5 556.38"]}
+{"ts": "2026-10-06T19:46:34+00:00", "event": "order", "symbol": "INTC", "side": "buy", "qty": 44.4432, "value": 5043.85, "price": 113.49, "order_id": "9cff7ad5-f5af-4b94-991a-3cfc0ab24d4f", "notes": ["stock ENTRY INTC (Tech): rsi2 6.0 < 10, above sma200 81.96"]}
