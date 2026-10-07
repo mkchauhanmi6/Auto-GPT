@@ -2,7 +2,7 @@
  "core_on": true,
  "dip": {},
  "halted": false,
- "last_run": "2026-10-06T19:46:34+00:00",
+ "last_run": "2026-10-07T19:46:44+00:00",
  "peak_equity": 100877.09,
  "stocks": {
   "C": {
@@ -13,13 +13,9 @@
    "entry_date": "2026-10-06",
    "entry_price": 113.49
   },
-  "JNJ": {
-   "entry_date": "2026-10-01",
-   "entry_price": 259.44
-  },
-  "VRTX": {
-   "entry_date": "2026-10-01",
-   "entry_price": 507.65
+  "QCOM": {
+   "entry_date": "2026-10-07",
+   "entry_price": 176.92
   }
  }
 }
