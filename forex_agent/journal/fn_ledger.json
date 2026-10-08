@@ -12,10 +12,10 @@
  "day": "2026-10-08",
  "day_start_pnl": 0.0,
  "closed_pnl": 0.0,
- "equity_pnl": 2.25,
+ "equity_pnl": -2.76,
  "commission_charged": 0.0,
  "trades_closed": 0,
  "phase_pnl_pct": 0.0,
- "phase_equity_pct": 0.02,
- "day_pnl_pct": 0.02
+ "phase_equity_pct": -0.03,
+ "day_pnl_pct": -0.03
 }
