@@ -29,7 +29,7 @@ THREADS = int(os.environ.get("DUKA_THREADS", "12"))
 URL = "https://datafeed.dukascopy.com/datafeed/{s}/{y}/{m:02d}/BID_candles_hour_1.bi5"
 
 
-def _fetch(url: str, tries: int = 6) -> bytes | None:
+def _fetch(url: str, tries: int = 12) -> bytes | None:
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -38,14 +38,24 @@ def _fetch(url: str, tries: int = 6) -> bytes | None:
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return None
-            time.sleep(2 * (i + 1))          # 503 = rate limited
+            time.sleep(min(3 * (i + 1), 30))   # 503 = busy
         except Exception:
-            time.sleep(2 * (i + 1))
+            time.sleep(min(3 * (i + 1), 30))
     raise RuntimeError(f"failed: {url}")
 
 
 def month(sym: str, y: int, m: int) -> pd.DataFrame:
-    raw = _fetch(URL.format(s=sym, y=y, m=m - 1))
+    # Raw monthly files are kept so an interrupted download resumes where it stopped.
+    # The current month is always refetched.
+    raw_dir = os.path.join(CACHE, "raw", sym)
+    os.makedirs(raw_dir, exist_ok=True)
+    f = os.path.join(raw_dir, f"{y}-{m:02d}.bi5")
+    today = dt.date.today()
+    if os.path.exists(f) and (y, m) != (today.year, today.month):
+        raw = open(f, "rb").read()
+    else:
+        raw = _fetch(URL.format(s=sym, y=y, m=m - 1)) or b""
+        open(f, "wb").write(raw)
     if not raw:
         return pd.DataFrame()
     data = lzma.decompress(raw, format=lzma.FORMAT_ALONE)
@@ -94,6 +104,12 @@ def download(sym: str) -> None:
 
 
 if __name__ == "__main__":
+    def safe(sym: str) -> None:
+        try:
+            download(sym)
+        except Exception as e:              # rerun to resume from the cached months
+            print(f"{sym}: incomplete ({e})", flush=True)
+
     syms = sys.argv[1:] or SYMBOLS
     with ThreadPoolExecutor(2) as ex:
-        list(ex.map(download, syms))
+        list(ex.map(safe, syms))
