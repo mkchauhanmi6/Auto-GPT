@@ -19,6 +19,9 @@ from . import dukascopy
 from .config import broker_symbol
 
 START = dt.datetime(2010, 1, 1, tzinfo=dt.timezone.utc)
+# MetaQuotes-Demo hourly bars before this weekend are stamped one hour early (checked
+# against Dukascopy UTC data: median gap 7 bp unshifted vs 0.4 bp after +1h).
+SHIFT_BEFORE = pd.Timestamp("2014-11-22", tz="UTC")
 
 
 async def fetch(account, sym: str) -> pd.DataFrame:
@@ -35,6 +38,9 @@ async def fetch(account, sym: str) -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df = df.set_index(pd.to_datetime(df["time"], utc=True))[
         ["open", "high", "low", "close", "tickVolume"]].rename(columns={"tickVolume": "volume"})
+    df = df[~df.index.duplicated()].sort_index()
+    early = df.index < SHIFT_BEFORE
+    df.index = df.index.where(~early, df.index + pd.Timedelta(hours=1))
     df = df[~df.index.duplicated()].sort_index()
     # Drop the still-forming last bar.
     if len(df) and df.index[-1] > pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=1):
