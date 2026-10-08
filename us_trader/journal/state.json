@@ -2,12 +2,16 @@
  "core_on": true,
  "dip": {},
  "halted": false,
- "last_run": "2026-10-07T19:46:44+00:00",
+ "last_run": "2026-10-08T19:46:55+00:00",
  "peak_equity": 100877.09,
  "stocks": {
   "C": {
    "entry_date": "2026-10-01",
    "entry_price": 126.88
+  },
+  "DE": {
+   "entry_date": "2026-10-08",
+   "entry_price": 651.93
   },
   "INTC": {
    "entry_date": "2026-10-06",
