@@ -10,7 +10,10 @@
    "lots": 0.09,
    "side": -1,
    "late_by": 0.00033,
-   "result": "TRADE_RETCODE_DONE"
+   "result": "TRADE_RETCODE_DONE",
+   "seen": [
+    "58815712623"
+   ]
   },
   "GBPUSD": {
    "status": "entered_late",
@@ -22,7 +25,10 @@
    "lots": 0.08,
    "side": -1,
    "late_by": 0.00013,
-   "result": "TRADE_RETCODE_DONE"
+   "result": "TRADE_RETCODE_DONE",
+   "seen": [
+    "58815715336"
+   ]
   },
   "USDJPY": {
    "status": "placed",
