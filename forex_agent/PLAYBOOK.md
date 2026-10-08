@@ -1,64 +1,36 @@
-# Run playbook (demo account, hourly on weekdays; full review once a day at 07:30 UTC)
+# Run playbook: London breakout forward test (demo run as a FundedNext 2-Step)
 
-Each scheduled session follows these steps in order. The strategy rules live in
-`run.py`; this playbook adds the fundamental and news review around them. Discretion
-is limited to the cases listed below, because discretionary overrides are untested.
+The carry strategy is retired (see README). The demo account is traded as if it were a
+FundedNext Stellar 2-Step challenge, to measure real fills and the edge before buying one.
 
-## 1. Setup
+## Schedule (UTC, weekdays)
+- 07:02 place the day's orders; 08:02-12:02 manage fills; 20:02 time exit; 21:02 fallback.
+- Every run is the same command; it does whatever the clock requires:
 ```
-git fetch origin claude/gallant-cannon-u3qdm0 && git checkout claude/gallant-cannon-u3qdm0
-pip install -q metaapi-cloud-sdk pandas numpy
+python -m forex_agent.breakout run
 ```
-If `METAAPI_TOKEN` or `METAAPI_ACCOUNT_ID` is unset, stop. Report that they must be
-added to the environment's variables.
 
-## 2. Account check
-`python -m forex_agent.run status`. Confirm the account `type` is a demo (e.g.
-`cloud-g2` with a demo server name, or a server containing "Demo"). **If it looks like a
-live account, place no trades and report.** Note the balance, equity and open positions.
+## Each run
+1. Environment: `METAAPI_TOKEN`, `METAAPI_ACCOUNT_ID` set (else source the private
+   metaapi.env in the scratchpad; never print or commit it). Export
+   `PROP_PROFILE=fundednext_2step PROP_INITIAL_BALANCE=10000 PROP_EA_APPROVED=1`.
+2. Run `python -m forex_agent.breakout run`. Read `actions`, `guard` and `ledger`.
+3. On a MetaApi timeout ("not connected to broker"), retry once. If it still fails, report it:
+   pending orders carry a broker-side stop and expire at 12:00, but a 20:00 exit can be
+   missed; the 21:02 run closes anything left before the rollover.
+4. Never trade outside `breakout.py`, never loosen `prop.py` or `breakout.py` limits, never
+   touch positions or orders without the LB comment and this agent's magic number. No
+   discretionary entries or exits.
 
-## 2b. FundedNext safety (when `PROP_PROFILE` is set)
-The guard in `prop.py` is applied to every plan, and the runner enforces it. Never work around it.
-- At $50,000 or more initial balance, FundedNext requires manual trading. `execute`
-  only prints the plan: report it as manual instructions and place nothing.
-- Below $50,000, orders are sent only if `PROP_EA_APPROVED=1` (FundedNext EA add-on/approval).
-- Never pass `--dry-run` off to get around a block, never edit `prop.py` limits, and never
-  open trades without a stop-loss.
-- Report the `prop_guard` block every run: firm floors, our safe floor, worst-case
-  equity, margin use, and any kill-switch or de-risking closes.
-- Any manual position without a stop-loss blocks new entries. Report it to the user.
+## Record
+- `journal/trades.jsonl` (fills with slippage, skips, closes) and `journal/fn_ledger.json`
+  (virtual challenge: phase, commission-adjusted P&L, trading days, results) are written by
+  the runner. Commit and push them after the 20:02 run, and whenever a challenge phase
+  passes or fails.
+- Notify the user on a challenge pass or fail, a guard block, or a failure. Otherwise reply
+  in 1-2 lines.
 
-## 3. Fundamental review (central banks)
-`plan --offline` prints the policy rates and their as-of dates. Search the news for
-rate decisions by the Fed, ECB, BoE, BoJ, RBA, BoC, SNB and RBNZ since those dates. If
-a decision changed a rate and BIS doesn't show it yet, pass it as an override: `--rate JPY=1.5`.
-Use only announced decisions, never expectations.
-
-## 4. Risk check (the only discretionary override)
-Carry strategies lose most in sudden risk-off crashes (2008, Aug 2024 yen unwind).
-Run `close-all --reason "..."` and open nothing new today only if one of these is
-happening right now:
-- an emergency or unscheduled central-bank action or FX intervention in a traded currency;
-- a market-wide panic (e.g. VIX above 35, or USDJPY falling more than 3% in a day).
-
-Write the evidence into the journal. Ordinary news is not a reason to override.
-
-## 5. Plan and execute
-```
-python -m forex_agent.run plan    [--rate ...]
-python -m forex_agent.run execute [--rate ...]
-```
-Read the plan before executing. Every open has a stop at the broker; there is no target.
-Early exits (a daily close at least halfway to the stop) are decided by `run.py`. Do not
-close trades on gut feel, wave counts or chart patterns: those were tested or are untestable
-(see README), and closing on them is not allowed.
-
-## 6. Record
-Scheduled runs cannot push to GitHub, so do not commit or push. Put this journal line
-in the report instead:
-`date time | balance | equity | open legs | actions taken | notes (rate changes, overrides, guard numbers)`.
-MetaApi/MT5 trade history is the authoritative record of trades.
-
-## 7. Report
-End with a short summary: account balance/equity, positions opened or closed and why,
-any skipped legs and why, upcoming high-impact events this week.
+## FundedNext costs being emulated
+- Commission: demo charges none, the ledger deducts $7/lot round trip (worst case quoted).
+- Swap: none expected, every trade closes by 20:00 UTC before the rollover.
+- Spread and slippage: real, from the demo. Slippage = fill vs the range level, per trade.

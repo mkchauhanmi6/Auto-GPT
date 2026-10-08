@@ -59,6 +59,22 @@ class Broker:
         fn = self.conn.create_market_buy_order if side == "buy" else self.conn.create_market_sell_order
         return await fn(symbol, lots, stop, target, opts)
 
+    async def orders(self, ours_only: bool = True) -> list[dict]:
+        orders = await self.conn.get_orders()
+        return [o for o in orders if not ours_only or o.get("magic") == MAGIC]
+
+    async def place_stop(self, symbol: str, side: str, lots: float, price: float, stop: float,
+                         expires: dt.datetime, comment: str) -> dict:
+        """Buy-stop above / sell-stop below the market, with a broker-side stop-loss and an
+        expiry time (the order is removed by the broker if not filled by then)."""
+        opts = {"comment": comment[:26], "magic": MAGIC,
+                "expiration": {"type": "ORDER_TIME_SPECIFIED", "time": expires}}
+        fn = self.conn.create_stop_buy_order if side == "buy" else self.conn.create_stop_sell_order
+        return await fn(symbol, lots, price, stop, None, opts)
+
+    async def cancel(self, order_id: str) -> dict:
+        return await self.conn.cancel_order(str(order_id))
+
     async def close(self, position_id: str) -> dict:
         return await self.conn.close_position(str(position_id))
 
