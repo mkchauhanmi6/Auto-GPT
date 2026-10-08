@@ -1,0 +1,19 @@
+{
+ "started": "2026-10-08T07:04:56.604411+00:00",
+ "initial": 10015.83,
+ "attempt": 1,
+ "phase": 1,
+ "phase_start": "2026-10-08T07:04:56.604411+00:00",
+ "phase_pnl_start": 0.0,
+ "trading_days": [],
+ "history": [],
+ "day": "2026-10-08",
+ "day_start_pnl": 0.0,
+ "closed_pnl": 0.0,
+ "equity_pnl": 0.0,
+ "commission_charged": 0.0,
+ "trades_closed": 0,
+ "phase_pnl_pct": 0.0,
+ "phase_equity_pct": 0.0,
+ "day_pnl_pct": 0.0
+}

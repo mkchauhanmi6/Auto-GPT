@@ -41,6 +41,7 @@ SYMBOLS = ["EURUSD", "GBPUSD", "USDJPY", "EURJPY", "GBPJPY", "XAUUSD"]
 RISK_PCT = float(os.environ.get("LB_RISK_PCT", "0.25"))
 FN_COMMISSION = float(os.environ.get("FN_COMMISSION", "7"))   # USD per lot, round trip
 RANGE_MIN, RANGE_MAX = 0.2, 1.0
+LATE_MAX = 0.25        # max distance past the level for a late market entry, x range
 ENTRY_FROM, ENTRY_UNTIL, EXIT_AT = 7, 12, 20                   # UTC hours
 TAG = "LB"
 DIR = pathlib.Path(__file__).parent / "journal"
@@ -188,10 +189,9 @@ async def setup_symbol(b, sym, now, today, ledger, dry) -> dict:
     px = await b.price(broker_symbol(sym))
     hi_seen = max([px["ask"]] + list(since["high"]))
     lo_seen = min([px["bid"]] + list(since["low"]))
-    if hi_seen >= s["hi"] or lo_seen <= s["lo"]:
-        journal({"event": "skip", "symbol": sym, "why": "range already broken before orders"})
-        return {"status": "missed", **s}
     risk_money = RISK_PCT / 100 * ledger["initial"]
+    if hi_seen >= s["hi"] or lo_seen <= s["lo"]:
+        return await late_entry(b, sym, s, px, hi_seen, lo_seen, risk_money, dry)
     lots = await b.lots_for_risk(broker_symbol(sym), s["hi"] - s["lo"], risk_money)
     if lots <= 0:
         return {"status": "skipped", **s, "why": "below minimum lot size"}
@@ -204,6 +204,35 @@ async def setup_symbol(b, sym, now, today, ledger, dry) -> dict:
                                   f"{TAG} {sym} {now:%m%d}")
         out.update(buy_order=buy.get("orderId"), sell_order=sell.get("orderId"))
     journal({"event": "orders" if not dry else "orders_dry_run", "symbol": sym, **out,
+             "risk_money": round(risk_money, 2)})
+    return out
+
+
+async def late_entry(b, sym, s, px, hi_seen, lo_seen, risk_money, dry) -> dict:
+    """The range broke before the orders could rest (e.g. in the minutes after 07:00). The
+    backtest would be in at the level, so enter at market if price is still within
+    LATE_MAX x range of it; the extra distance is recorded as slippage. Both sides broken
+    = whipsaw, skipped as in the backtest."""
+    rng = s["hi"] - s["lo"]
+    if hi_seen >= s["hi"] and lo_seen <= s["lo"]:
+        journal({"event": "skip", "symbol": sym, "why": "both sides broken before orders"})
+        return {"status": "missed", **s}
+    side = 1 if hi_seen >= s["hi"] else -1
+    level, stop = (s["hi"], s["lo"]) if side > 0 else (s["lo"], s["hi"])
+    entry = px["ask"] if side > 0 else px["bid"]
+    late = side * (entry - level)
+    if late > LATE_MAX * rng or side * (entry - stop) <= 0:
+        journal({"event": "skip", "symbol": sym, "why": f"broke before orders, now {late / rng:.2f} x range past the level"})
+        return {"status": "missed", **s}
+    lots = await b.lots_for_risk(broker_symbol(sym), side * (entry - stop), risk_money)
+    if lots <= 0:
+        return {"status": "skipped", **s, "why": "below minimum lot size"}
+    out = {"status": "entered_late", **s, "lots": lots, "side": side, "late_by": round(late, 6)}
+    if not dry:
+        res = await b.open(broker_symbol(sym), "buy" if side > 0 else "sell", lots, stop, None,
+                           f"{TAG} {sym} {dt.datetime.now(dt.timezone.utc):%m%d}")
+        out["result"] = res.get("stringCode")
+    journal({"event": "late_entry" if not dry else "late_entry_dry_run", "symbol": sym, **out,
              "risk_money": round(risk_money, 2)})
     return out
 
