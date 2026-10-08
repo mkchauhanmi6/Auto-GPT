@@ -76,3 +76,24 @@ Live trading with real money needs a forward-test track record first.
 
 Reproduce: `python -m forex_agent.backtest --entry breakout --exit target --fundamental carry`
 and `python -m forex_agent.portfolio_backtest`.
+
+## Intraday research for the FundedNext 2-Step (2026-10-08)
+Data: MT5 broker hourly bars via MetaApi (`mt5_history.py`), 11 symbols 2010-2026, cross-checked
+against Dukascopy (median gap 0.5 bp after fixing a 1h stamp offset before 2014-11-22). Costs:
+retail spread + $7/lot commission. Rules fixed in advance; train 2010-18, test 2019-26.
+Pass rates from `challenge.py` (block bootstrap of test-period days, all FundedNext limits).
+
+| Strategy (`intraday.py`) | avg R train / test | pass both phases (0.25% / 0.5% risk) | coin-flip same trades |
+|---|---|---|---|
+| Session seasonality (Breedon-Ranaldo) | -0.036 / -0.051 | 1% / 1% | 0% / 0% |
+| London breakout, exit 20:00 UTC | +0.027 / +0.035 (t 2.7) | 60% / 43% | 7% / 13% |
+| London breakout, 2R target | +0.006 / +0.017 | 51% / 40% | 2% / 6% |
+| 4h Donchian trend | -0.034 / -0.113 | 0% / 0% | 0% / 0% |
+
+London breakout (time exit) is the only candidate, and it is fragile:
+- The edge is about 1 pip per round trip; 0.5 pip of extra slippage per side leaves +0.007R,
+  1 pip leaves -0.021R. Stop-order entries at the London open often slip that much.
+- No single symbol is significant alone (t <= 2.1); gold worked in train and not in test.
+- At 0.25% risk the test period made ~11%/yr but had a 15.9% drawdown, more than the 10%
+  max loss; a funded account would be lost in 61% of simulated years.
+Not traded live. Next step would be a forward test measuring real fills.
