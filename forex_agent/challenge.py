@@ -176,3 +176,59 @@ def challenge_mc(daily: pd.DataFrame, risk_pct: float, n: int = 2000, block: int
             "p_both": round(both.mean(), 3),
             "p_timeout": round(((df["p1"] == "timeout") | (df["p2"] == "timeout")).mean(), 3),
             "median_trading_days_to_pass": float((df.loc[both, "d1"] + df.loc[both, "d2"]).median()) if both.any() else None}
+
+
+def funded_mc(daily: pd.DataFrame, risk_pct: float, n: int = 2000, block: int = 5,
+              days: int = 252, cycle: int = 15, split: float = 0.8, seed: int = 1) -> dict:
+    """One year funded (252 trading days, payout check every 15 trading days ~ 21 calendar
+    days): average reward as % of account, and the chance of losing the account."""
+    rng = np.random.default_rng(seed)
+    D, W = daily["delta"].to_numpy(), daily["worst"].to_numpy()
+    L = len(D)
+    paid_all, breach_all = [], []
+    for _ in range(n):
+        idx = np.concatenate([np.arange(s, s + block) for s in rng.integers(0, L - block, days // block + 1)])[:days]
+        eq, paid, breach = 0.0, 0.0, False
+        for i, j in enumerate(idx):
+            w = eq + W[j] * risk_pct
+            if w - eq <= -DAILY_LOSS or w <= -MAX_LOSS:
+                breach = True
+                break
+            eq += D[j] * risk_pct
+            if (i + 1) % cycle == 0 and eq > 0:
+                paid += split * eq
+                eq = 0.0
+        paid_all.append(paid)
+        breach_all.append(breach)
+    return {"risk_pct": risk_pct, "avg_reward_pct_per_year": round(float(np.mean(paid_all)), 2),
+            "median_reward_pct": round(float(np.median(paid_all)), 2),
+            "p_lose_account_within_year": round(float(np.mean(breach_all)), 3)}
+
+
+def main() -> None:
+    """Evaluate every intraday strategy: trade stats (train/test) and, on the test period,
+    challenge pass rates and funded rewards vs a coin-flip baseline with identical costs."""
+    import json
+    import sys
+    from . import intraday as I
+    data = I.load_all()
+    names = sys.argv[1:] or list(I.STRATEGIES)
+    risks = (0.25, 0.5, 1.0, 1.5)
+    for name in names:
+        trades = I.STRATEGIES[name](data)
+        res = I.simulate(trades, data)
+        rnd = I.simulate(I.randomized(trades), data)
+        print(f"\n== {name}", json.dumps({"strategy": I.split_stats(res),
+                                           "coin_flip": I.split_stats(rnd)}), flush=True)
+        start, end = pd.Timestamp(I.TRAIN_END, tz="UTC"), pd.Timestamp.now(tz="UTC")
+        for label, t in (("strategy", res), ("coin_flip", rnd)):
+            for rp in risks:
+                d = daily_series(t, rp, start, end)
+                c = challenge_mc(d, rp, n=1000)
+                f = funded_mc(d, rp, n=1000)
+                print(label, json.dumps({**c, **{k: v for k, v in f.items() if k != "risk_pct"}}),
+                      flush=True)
+
+
+if __name__ == "__main__":
+    main()
