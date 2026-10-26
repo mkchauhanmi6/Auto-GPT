@@ -3,7 +3,7 @@
 The account is Alpaca **paper**. The rules in `config.py` are the exact backtested rules. The owner chose a 60/40 split between ETFs and stocks.
 - **Core sleeve (36%):** hold SPY while SPY is above its 200-day average; otherwise hold cash.
 - **ETF dip-buys (4 × 6%):** SPY, QQQ, IWM and DIA. Buy when the ETF is above its 200-day average and its 2-day RSI is below 10. Sell when it closes above its 5-day average.
-- **Stock dip-buys (8 × 5%):** the same rule on about 100 large caps (`universe.py`). New entries only while SPY is above its 200-day average. Lowest RSI first, at most 2 per sector, and no entry if earnings are due within 7 days.
+- **Stock dip-buys (8 × 5%):** the same rule on about 100 large caps (`universe.py`). New entries only while SPY is above its 200-day average. Lowest RSI first, at most 2 per sector, and no entry if earnings are due within 7 days. Sell at the first of: a close above the 5-day average, a close 15% or more below entry (stop-loss), or the 10th trading day after entry (time limit). The stop-loss and time limit were added on 2026-10-26 at the owner's request, after a backtest showed they don't cost return (2016–2026: +8.9%/yr, Sharpe 1.00, worst drawdown −11%; worst trade −27% instead of −36%).
 - **Safety:** if equity falls 20% below its peak, liquidate everything and halt.
 
 Backtest results, 2016–2026:

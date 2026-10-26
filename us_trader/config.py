@@ -37,6 +37,10 @@ STOCK_WEIGHT = 0.05        # per stock
 STOCK_SLOTS = 8
 SECTOR_CAP = 2
 EARNINGS_BLACKOUT_DAYS = 7
+# Stock exits besides close > 5-day average (added 2026-10-26 at the owner's request, backtested first:
+# 2016-2026 +8.9%/yr, Sharpe 1.00, maxDD -11% vs +8.8%/0.98/-13% without; worst trade -27% vs -36%).
+STOCK_STOP_LOSS = 0.15     # sell at the close if down 15%+ from entry
+STOCK_MAX_DAYS = 10        # sell at the close on the 10th trading day after entry
 
 # Execution / safety
 REBALANCE_DRIFT = 0.03     # resize a holding only if it drifted this far (fraction of equity) from target

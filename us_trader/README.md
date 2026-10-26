@@ -16,6 +16,8 @@ Backtest on daily adjusted data, 3 bps cost per trade, cash earning T-bill retur
 
 The stock rows use today's ~100 largest companies (`universe.py`), so they suffer from survivorship bias. Holding those same stocks equally weighted "returned" +14.6%/yr in 2001–2015, against +5.0% for SPY, which shows how much the bias flatters them. Stock dip-buys won 65% of trades from 2016 to 2026, averaging +0.2% per trade after costs. Treat the stock sleeve as an experiment; it is tracked separately in `review`.
 
+Since 2026-10-26, stocks also exit on a close 15% or more below entry, or on the 10th trading day after entry. Backtest with these exits: 2001–2015 +6.4%/yr, Sharpe 0.83, −13%; 2016–2026 +8.9%/yr, Sharpe 1.00, −11%; worst single trade −27% (was −36%).
+
 How to read this:
 - **Win rates:** dip-buys won 73% of trades in 2001–2015 and 70% in 2016–2026. The median hold was 5 days.
 - **Return versus risk:** nothing here beat simply holding SPY on raw return since 2016. What this setup buys is much smaller drawdowns and a better return per unit of risk.

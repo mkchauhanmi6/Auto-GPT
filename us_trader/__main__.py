@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from . import config, earnings
 from .alpaca import Alpaca
-from .signals import NY, indicators
+from .signals import NY, daily_closes, indicators
 from .universe import SECTOR
 
 NOW = datetime.now(timezone.utc)
@@ -73,6 +73,26 @@ def snapshot(alp, market_open, symbols=UNIVERSE):
 
 def is_dip_entry(i):
     return i["above_sma200"] and i["rsi2"] < config.DIP_RSI_ENTRY
+
+
+def trading_days_since(entry_date, sessions):
+    """Sessions after the entry day, counting today's (the runs happen at the close)."""
+    if entry_date == "unknown":
+        return None
+    return sum(str(d) > entry_date for d in sessions) + 1
+
+
+def stock_exit_reason(i, pos_state, sessions):
+    """Why a held stock exits at today's close, or None. Same order as the backtest."""
+    if i["price"] > i["sma5"]:
+        return f"{i['price']} > sma5 {i['sma5']}"
+    ret = i["price"] / pos_state["entry_price"] - 1
+    if ret <= -config.STOCK_STOP_LOSS:
+        return f"stop-loss {ret:+.1%} from entry {pos_state['entry_price']}"
+    days = trading_days_since(pos_state["entry_date"], sessions)
+    if days is not None and days >= config.STOCK_MAX_DAYS:
+        return f"time limit, day {days} since entry {pos_state['entry_date']}"
+    return None
 
 
 # ---------- commands ----------
@@ -164,10 +184,12 @@ def cmd_run(args):
 
     # stock dip-buys
     stocks = dict(st["stocks"])
+    sessions = [d for d, _ in daily_closes(config.CORE_SYMBOL)] if stocks else []
     for s in list(stocks):
         i = ind.get(s)
-        if i and i["price"] > i["sma5"]:
-            notes.append(f"stock EXIT {s}: {i['price']} > sma5 {i['sma5']}")
+        why = i and stock_exit_reason(i, stocks[s], sessions)
+        if why:
+            notes.append(f"stock EXIT {s}: {why}")
             del stocks[s]
             changed.add(s)
     cands = sorted((ind[s]["rsi2"], s) for s in STOCKS if s in ind and s not in stocks and is_dip_entry(ind[s]))
@@ -263,7 +285,9 @@ def cmd_monitor(args):
         spy_day = ind["SPY"]["price"] / indicators("SPY")["price"] - 1
         if spy_day <= -config.ALERT_SPY_DAY_MOVE:
             alerts.append(f"SPY down {spy_day:.1%} today")
-        exits = [s for s in held if s in ind and ind[s]["price"] > ind[s]["sma5"]]
+        sessions = [d for d, _ in daily_closes(config.CORE_SYMBOL)]
+        exits = [s for s in st["dip"] if s in ind and ind[s]["price"] > ind[s]["sma5"]] + \
+                [s for s in st["stocks"] if s in ind and stock_exit_reason(ind[s], st["stocks"][s], sessions)]
         entries = sorted((ind[s]["rsi2"], s) for s in ETFS + STOCKS
                          if s in ind and s not in held and is_dip_entry(ind[s]))
         print("If the close were now: exits " + (", ".join(exits) or "none") + "; entry candidates "
