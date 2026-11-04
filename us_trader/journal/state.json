@@ -1,21 +1,13 @@
 {
  "core_on": true,
  "dip": {
-  "DIA": {
-   "entry_date": "2026-10-30",
-   "entry_price": 516.07
-  },
   "QQQ": {
    "entry_date": "2026-10-30",
    "entry_price": 688.87
-  },
-  "SPY": {
-   "entry_date": "2026-10-30",
-   "entry_price": 753.77
   }
  },
  "halted": false,
- "last_run": "2026-11-03T20:49:04+00:00",
+ "last_run": "2026-11-04T20:46:32+00:00",
  "peak_equity": 100877.09,
  "stocks": {
   "CRM": {
@@ -25,6 +17,18 @@
   "CSCO": {
    "entry_date": "2026-10-30",
    "entry_price": 104.27
+  },
+  "CVX": {
+   "entry_date": "2026-11-04",
+   "entry_price": 217.09
+  },
+  "LMT": {
+   "entry_date": "2026-11-04",
+   "entry_price": 593.19
+  },
+  "XOM": {
+   "entry_date": "2026-11-04",
+   "entry_price": 169.64
   }
  }
 }
