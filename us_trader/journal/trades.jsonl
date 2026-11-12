@@ -55,3 +55,4 @@
 {"ts": "2026-11-11T20:46:20+00:00", "event": "order", "symbol": "CRM", "side": "close", "qty": 21.6674, "value": -4710.71, "price": 217.41, "order_id": "f6054a71-0508-4180-98c3-de23d1739ae9", "notes": ["stock EXIT CRM: 217.41 > sma5 216.38"]}
 {"ts": "2026-11-11T20:46:20+00:00", "event": "order", "symbol": "CVX", "side": "close", "qty": 22.9138, "value": -4866.66, "price": 212.39, "order_id": "3d413510-e00c-4228-9e2f-7251e73cf060", "notes": ["stock EXIT CVX: 212.39 > sma5 211.99"]}
 {"ts": "2026-11-11T20:46:20+00:00", "event": "order", "symbol": "XOM", "side": "close", "qty": 29.323, "value": -4871.72, "price": 166.14, "order_id": "9fd50054-3cd8-4293-b602-5f09319113d8", "notes": ["stock EXIT XOM: 166.14 > sma5 165.3"]}
+{"ts": "2026-11-12T20:46:38+00:00", "event": "order", "symbol": "PM", "side": "close", "qty": 25.2902, "value": -5011.51, "price": 198.16, "order_id": "9d54401d-96fa-4c5e-be10-1d056a8ceafc", "notes": ["stock EXIT PM: 198.16 > sma5 195.95"]}
